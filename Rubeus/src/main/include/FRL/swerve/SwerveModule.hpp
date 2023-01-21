@@ -140,7 +140,19 @@ public:
             linkSwerve -> ApplySpeed();
         }
     } 
-
+    
+    /**
+    Change the orientation of the robot
+    */
+    void Orient(float amt) {
+        if (amt < 0) {
+            SetDirection(coterminal(270 - (role * 90)), amt);
+        }
+        
+        else {
+            SetDirection(coterminal(360 - (role * 90)), amt);           
+        }
+    }
     /**
      * Get the current (physical) direction of the module
      */
