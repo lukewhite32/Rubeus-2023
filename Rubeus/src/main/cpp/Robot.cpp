@@ -6,20 +6,27 @@
 #include <FRL/motor/SparkMotor.hpp>
 #include <FRL/swerve/SwerveModule.hpp>
 #include <constants.h>
+#include <frc/XboxController.h>
+#include <AHRS.h>
+#include <frc/smartdashboard/SmartDashboard.h>
+
+#define PI              3.141592
+#define XBOX_DEADBAND   0.05
+#define XBOX_SPEEDLIMIT 0.2
 
 
 SwerveModule frontLeftSwerve (
   new SparkMotor(FRONT_LEFT_SPEED),
   new SparkMotor(FRONT_LEFT_DIREC),
   FRONT_LEFT_CANCODER,
-  FRONT_LEFT_OFFSET
+  2048 + FRONT_LEFT_OFFSET
 );
 
 SwerveModule frontRightSwerve (
   new SparkMotor(FRONT_RIGHT_SPEED),
   new SparkMotor(FRONT_RIGHT_DIREC),
   FRONT_RIGHT_CANCODER,
-  FRONT_RIGHT_OFFSET
+  2048 + FRONT_RIGHT_OFFSET
 );
 
 SwerveModule mainSwerve (
@@ -37,10 +44,46 @@ SwerveModule backRightSwerve (
 );
 
 
+frc::XboxController xbox {4};
+AHRS navx {frc::SPI::Port::kMXP}; // Well, obviously, the navx
+double navxOffset = 0;
+
+long navxHeadingToEncoderTicks(){
+  return (navx.GetFusedHeading() - navxOffset) * 4096/360;
+}
+
+void zeroNavx(){
+  navxOffset = navx.GetFusedHeading();
+}
+
+
 class TeleopMode : public RobotMode {
 public:
-  void Loop(){
-    mainSwerve.SetDirection(0); // 0 the entire drive
+  void Start(){
+    zeroNavx();
+  }
+
+  void Synchronous(){
+    long direction = navxHeadingToEncoderTicks();
+    float dx = xbox.GetLeftX();
+    float dy = xbox.GetLeftY();
+    float hypotenuse = sqrt(dx * dx + dy * dy);
+    hypotenuse *= XBOX_SPEEDLIMIT;
+    double joystickDir = atan(dy/dx);
+    if (dx < 0){
+      joystickDir += PI;
+    }
+    joystickDir = PI - joystickDir; // Flip it? I think?
+    direction += joystickDir * 4096/(2 * PI);
+    if ((dx * dx + dy * dy) > XBOX_DEADBAND * XBOX_DEADBAND){
+      mainSwerve.SetDirection(smartLoop(direction)); // 0 the entire drive
+      mainSwerve.MovePercent(hypotenuse);
+    }
+    else{
+      mainSwerve.SetDirection(0);
+      mainSwerve.MovePercent(0);
+    }
+    mainSwerve.ApplySpeed();
   }
 };
 

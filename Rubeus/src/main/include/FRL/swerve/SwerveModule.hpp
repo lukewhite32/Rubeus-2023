@@ -89,12 +89,28 @@ public:
         isLinked = true;           
         linkSwerve = LinkSwerve; 
     }
-
+    long rotationLength = 4096;
+    double loopize(double set, double cur){
+        if (std::abs(set - cur) >= rotationLength/2){
+            if (set > cur){
+                return -(rotationLength - set + cur);
+            }
+            else{
+                return rotationLength - cur + set;
+            }
+        }
+        else{
+            return set - cur;
+        }
+    }
     /**
      * Set the direction of the motor.
      @param targetPos The encoder tick to aim for
      */
     void SetDirection(double targetPos) {
+        if (loopize(GetDirection(), targetPos) > 1024){ // 1024 = 90 degrees
+            speed -> SetInverted();
+        }
         directionController -> SetPosition(targetPos);
         directionController -> Update(GetDirection());
         if (isLinked){
@@ -129,6 +145,10 @@ public:
      * Get the current (physical) direction of the module
      */
     long GetDirection() {
-        return smartLoop(cancoder -> GetAbsolutePosition() - encoderOffset);
+        double v = smartLoop(cancoder -> GetAbsolutePosition() - encoderOffset);
+        if (speed -> inversionState){
+            v = smartLoop(2048 + v); // Flip it about the 180
+        }
+        return v;
     }
 };

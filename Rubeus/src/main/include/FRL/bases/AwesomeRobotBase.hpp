@@ -82,6 +82,8 @@ public:
      * Good safety solution: don't ever directly call library functions in this thread, and instead use std::atomics to store things like motor speeds, to be updated synchronously.
 
      * It is safe to use infinite while loops in here! The thread handling intentionally permits it.
+
+     * DEPRECATED: pthread_cancel doesn't work properly on the RoboRIO so threads are deprecated for now.
      */
     virtual void Thread() {
 
@@ -149,10 +151,6 @@ class AwesomeRobot : public frc::RobotBase {
      * Store a pointer to the active mode. If this is 0, no mode is active. This is default, safe, and checked for; it will only be 0 until the robot turns on and does the disabled check.
      */
     RobotMode* activeMode = 0;
-    /**
-     * Surprise surprise: there's only one thread. It calls activeMode -> Thread() at a specified update rate using 
-     */
-    pthread_t thread;
 
     /**
      * Internal FRC stuff
@@ -161,6 +159,8 @@ class AwesomeRobot : public frc::RobotBase {
 
     /**
      * The actual thread function
+
+     * DEPRECATED: pthread_cancel doesn't work properly on the RoboRIO so threads are deprecated for now.
      @param _robot A void* pointer to the AwesomeRobot object. Necessary because this is static.
      */
     static void* thread_function(void* _robot){
@@ -186,8 +186,6 @@ class AwesomeRobot : public frc::RobotBase {
      */
     void switchMode(RobotMode* toMode){
         if (activeMode){ // If the pointer is actually set and isn't initial 0
-            pthread_cancel(thread); // Only ever called if ActiveMode is non-NULL; e.g. switchMode has already been called and a thread is actually running
-            pthread_join(thread, NULL); // It isn't guaranteed that cancellation will be immediate, even though the thread cancel type is asynchronous
             // It is, however, guaranteed that the thread will be exited as soon as pthread_join returns
             // NULL means don't bother with the return value of the pthread's function
             activeMode -> End(); // End() may do cleanup work concerning threads (there are situations where this is acceptable, such  as when memory has been allocated by Start specifically for the usage of that thread),
@@ -195,30 +193,7 @@ class AwesomeRobot : public frc::RobotBase {
         }
         activeMode = toMode;
         toMode -> Start();
-        modeThread.InDisabled(false);
-        modeThread.InAutonomous(false);
-        modeThread.InTeleop(false);
-        modeThread.InTest(false);
-        if (activeMode == disabled){
-            modeThread.InDisabled(true);
-        }
-        else if (activeMode == teleop){
-            modeThread.InTeleop(true);
-        }
-        else if (activeMode == autonomous){
-            modeThread.InAutonomous(true);
-        }
-        else if (activeMode == test){
-            modeThread.InTest(true);
-        }
         // Start the thread for that mode
-        if (pthread_create(&thread, NULL, thread_function, this) != 0){
-            activeMode -> noThread = true;
-            std::cout << "Thread creation failed! Nothread flag set in the active robot mode." << std::endl;
-        }
-        else{
-            activeMode -> noThread = false;
-        }
     }
 public:
 
@@ -237,25 +212,33 @@ public:
         test -> Init();
 
         while (!m_exit){
+            modeThread.InDisabled(false);
+            modeThread.InAutonomous(false);
+            modeThread.InTeleop(false);
+            modeThread.InTest(false);
             if (IsDisabled()){ // Disabled tasks
+                modeThread.InDisabled(true);
                 if (activeMode != disabled){
                     switchMode(disabled);
                     std::cout << "Switched to Disabled Mode" << std::endl;
                 }
             }
             else if (IsAutonomous()){ // Autonomous tasks
+                modeThread.InAutonomous(true);
                 if (activeMode != autonomous){
                     switchMode(autonomous);
                     std::cout << "Switched to Autonomous Mode" << std::endl;
                 }
             }
             else if (IsTest()){ // Test tasks
+                modeThread.InTest(true);
                 if (activeMode != test){
                     switchMode(test);
                     std::cout << "Switched to Test Mode" << std::endl;
                 }
             }
             else{ // Teleop tasks
+                modeThread.InTeleop(true);
                 if (activeMode != teleop){
                     switchMode(teleop);
                     std::cout << "Switched to Teleop Mode" << std::endl;
